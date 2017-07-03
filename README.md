@@ -3,8 +3,8 @@
 A tool made by GraxCode to edit jar files based on JBytedit by QMatt.
 
 #### Todo-List
-- Inserting nodes
-- Editing Try-Catch-Blocks
+- Inserting nodes (done)
+- Editing Try-Catch-Blocks (halfway done)
 - Editing Local-Vars
 - Editing Fields
 - Deleting Classes / Methods
