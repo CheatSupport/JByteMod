@@ -30,6 +30,11 @@ public class PopupMenu {
 			JMenuItem insert = new JMenuItem("Insert after");
 			insert.addActionListener(new ActionListener() {
 				public void actionPerformed(ActionEvent e) {
+					try {
+						EditDialogue.createInsertInsnDialog(mn, ain);
+					} catch (Exception e1) {
+						e1.printStackTrace();
+					}
 				}
 			});
 			menu.add(insert);

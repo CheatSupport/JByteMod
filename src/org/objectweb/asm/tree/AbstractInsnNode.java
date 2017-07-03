@@ -132,6 +132,9 @@ public abstract class AbstractInsnNode {
 		this.opcode = opcode;
 	}
 
+    public AbstractInsnNode() {
+   	 this.opcode = -1;
+    }
 	/**
      * The runtime visible type annotations of this instruction. This field is
      * only used for real instructions (i.e. not for labels, frames, or line

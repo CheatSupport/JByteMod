@@ -43,7 +43,7 @@ public class InsnList {
     /**
      * The number of instructions in this list.
      */
-    private int size;
+    public int size;
 
     /**
      * The first instruction in this list. May be <tt>null</tt>.

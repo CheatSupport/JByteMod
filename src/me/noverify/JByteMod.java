@@ -30,6 +30,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
@@ -52,16 +53,22 @@ import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TryCatchBlockNode;
 
 import me.lpk.util.JarUtils;
 import me.noverify.list.CellRenderer;
 import me.noverify.list.InsnListEntry;
 import me.noverify.list.ListEntry;
 import me.noverify.list.SearchListEntry;
+import me.noverify.list.TCBListEntry;
 import me.noverify.utils.DisplayUtils;
 import me.noverify.utils.EditDialogue;
+import me.noverify.utils.MethodUtils;
 import me.noverify.utils.PopupMenu;
 import me.noverify.utils.SortedTreeNode;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.event.ChangeListener;
+import javax.swing.event.ChangeEvent;
 
 public class JByteMod extends JFrame {
 
@@ -85,6 +92,10 @@ public class JByteMod extends JFrame {
 	private JLabel rightDesc;
 	private JLabel searchDesc;
 	private File opened;
+	private JMenu mnSettings;
+	private JCheckBoxMenuItem chckbxmntmSortMethods;
+	private JLabel tcbDesc;
+	private JList<TCBListEntry> tcbList;
 
 	/**
 	 * Launch the application.
@@ -125,7 +136,7 @@ public class JByteMod extends JFrame {
 			}
 		});
 		setBounds(100, 100, 1280, 720);
-		setTitle("JByteMod");
+		setTitle("JByteMod v0.4.1");
 
 		menuBar = new JMenuBar();
 		setJMenuBar(menuBar);
@@ -206,6 +217,18 @@ public class JByteMod extends JFrame {
 		});
 		mntmSearch.setAccelerator(KeyStroke.getKeyStroke('H', Toolkit.getDefaultToolkit().getMenuShortcutKeyMask()));
 		mnTools.add(mntmSearch);
+
+		mnSettings = new JMenu("Settings");
+		menuBar.add(mnSettings);
+
+		chckbxmntmSortMethods = new JCheckBoxMenuItem("Sort Methods");
+		chckbxmntmSortMethods.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				setupTree();
+			}
+		});
+		chckbxmntmSortMethods.setSelected(true);
+		mnSettings.add(chckbxmntmSortMethods);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		contentPane.setLayout(new BorderLayout(0, 0));
@@ -299,11 +322,17 @@ public class JByteMod extends JFrame {
 		for (AbstractInsnNode ain : mn.instructions.toArray()) {
 			lm.addElement(new InsnListEntry(mn, ain));
 		}
+		
+		DefaultListModel<TCBListEntry> lm2 = (DefaultListModel<TCBListEntry>) tcbList.getModel();
+		lm2.clear();
+		tcbDesc.setText("Try Catch Blocks: " + cn.name + "." + mn.name + mn.desc);
+		for (TryCatchBlockNode tcbn : mn.tryCatchBlocks) {
+			lm2.addElement(new TCBListEntry(cn, mn, tcbn));
+		}
 	}
 
 	protected void openFileChooserLoad() {
 		JFileChooser jfc = new JFileChooser(new File(System.getProperty("user.home") + "/Desktop"));
-		//		jfc.addChoosableFileFilter(new FileNameExtensionFilter("Java Archives", "jar", "zip"));
 		jfc.setAcceptAllFileFilterUsed(false);
 		jfc.setFileFilter(new FileNameExtensionFilter("Java Archives", "jar", "zip"));
 		int result = jfc.showOpenDialog(this);
@@ -373,7 +402,6 @@ public class JByteMod extends JFrame {
 						if (i == names.length) {
 							newnode.setMn(m);
 							node.add(newnode);
-							//						tm.insertNodeInto(newnode, node, node.getChildCount());
 							tm.getChildCount(node);
 						} else {
 							SortedTreeNode extnode = addUniqueNode(tm, node, newnode);
@@ -407,6 +435,17 @@ public class JByteMod extends JFrame {
 								}
 							});
 							menu.add(edit);
+							JMenuItem clear = new JMenuItem("Clear");
+							clear.addActionListener(new ActionListener() {
+								public void actionPerformed(ActionEvent e) {
+									if (JOptionPane.showConfirmDialog(JByteMod.instance,
+											"Are you sure you want to clear that method?", "Confirm", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+										MethodUtils.clear(mn);
+										decompileMethod(cn, mn);
+									}
+								}
+							});
+							menu.add(clear);
 							menu.show(fileTree, me.getX(), me.getY());
 						} else if (cn != null) {
 							JPopupMenu menu = new JPopupMenu();
@@ -437,7 +476,7 @@ public class JByteMod extends JFrame {
 	}
 
 	public void sort(DefaultTreeModel model, SortedTreeNode node) {
-		if (!node.isLeaf()) {
+		if (!node.isLeaf() && (chckbxmntmSortMethods.isSelected() ? true : (!node.getUserObject().toString().endsWith(".class")))) {
 			node.sort();
 			for (int i = 0; i < model.getChildCount(node); i++) {
 				SortedTreeNode child = ((SortedTreeNode) model.getChild(node, i));
@@ -456,6 +495,26 @@ public class JByteMod extends JFrame {
 				}
 			}
 		});
+		tcbList = new JList<TCBListEntry>(new DefaultListModel());
+		tcbList.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+		tcbList.addMouseListener(new MouseAdapter() {
+			public void mousePressed(MouseEvent e) {
+				if (SwingUtilities.isRightMouseButton(e)) {
+					JPopupMenu menu = new JPopupMenu();
+					JMenuItem remove = new JMenuItem("Remove");
+					remove.addActionListener(new ActionListener() {
+						public void actionPerformed(ActionEvent e) {
+							ClassNode cn = tcbList.getSelectedValue().getCn();
+							MethodNode mn = tcbList.getSelectedValue().getMn();
+							mn.tryCatchBlocks.remove(tcbList.getSelectedValue().getTcbn());
+							decompileMethod(cn, mn);
+						}
+					});
+					menu.add(remove);
+					menu.show(tcbList, e.getX(), e.getY());
+				}
+			}
+		});
 		searchList = new JList<SearchListEntry>(new DefaultListModel());
 		searchList.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
 		searchList.addMouseListener(new MouseAdapter() {
@@ -467,8 +526,10 @@ public class JByteMod extends JFrame {
 						public void actionPerformed(ActionEvent e) {
 							ClassNode cn = searchList.getSelectedValue().getCn();
 							MethodNode mn = searchList.getSelectedValue().getMn();
+							selectTree(cn, mn);
 							decompileMethod(cn, mn);
 						}
+
 					});
 					menu.add(decl);
 					menu.show(searchList, e.getX(), e.getY());
@@ -496,6 +557,37 @@ public class JByteMod extends JFrame {
 		search.add(lpad2, BorderLayout.NORTH);
 		search.add(new JScrollPane(searchList), BorderLayout.CENTER);
 		rightSide.addTab("Search", search);
+		
+		JPanel tcb = new JPanel();
+		tcb.setLayout(new BorderLayout(0, 0));
+		JPanel lpad3 = new JPanel();
+		lpad3.setBorder(new EmptyBorder(1, 5, 0, 5));
+		lpad3.setLayout(new GridLayout());
+		tcbDesc = new JLabel(" ");
+		lpad3.add(tcbDesc);
+		tcb.add(lpad3, BorderLayout.NORTH);
+		tcb.add(new JScrollPane(tcbList), BorderLayout.CENTER);
+		rightSide.addTab("Try Catch Blocks", tcb);
+	}
+
+	private void selectTree(ClassNode cn, MethodNode mn) {
+		new Thread(() -> {
+			DefaultTreeModel tm = (DefaultTreeModel) fileTree.getModel();
+			selectEntry(mn, tm, (SortedTreeNode) tm.getRoot());
+		}).start();
+	}
+
+	private void selectEntry(MethodNode mn, DefaultTreeModel tm, SortedTreeNode node) {
+		for (int i = 0; i < tm.getChildCount(node); i++) {
+			SortedTreeNode child = (SortedTreeNode) tm.getChild(node, i);
+			if (child.getMn() != null && child.getMn().equals(mn)) {
+				fileTree.setSelectionPath(new TreePath(tm.getPathToRoot(child)));
+				break;
+			}
+			if (!child.isLeaf()) {
+				selectEntry(mn, tm, child);
+			}
+		}
 	}
 
 	public void reloadList(MethodNode mn) {

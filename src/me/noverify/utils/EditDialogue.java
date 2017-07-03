@@ -62,7 +62,7 @@ public class EditDialogue {
 	/**
 	 * @wbp.parser.entryPoint
 	 */
-	public static void createEditInsnDialog(MethodNode mn, AbstractInsnNode ain) throws Exception {
+	public static boolean createEditInsnDialog(MethodNode mn, AbstractInsnNode ain) throws Exception {
 		final JPanel panel = new JPanel(new BorderLayout(5, 5));
 		final JPanel input = new JPanel(new GridLayout(0, 1));
 		final JPanel labels = new JPanel(new GridLayout(0, 1));
@@ -76,7 +76,7 @@ public class EditDialogue {
 			String[] arr = opc.get(ain.getClass().getSimpleName());
 			if (arr == null) {
 				error(ain.getClass().getSimpleName() + "s aren\'t supported yet");
-				return;
+				return false;
 			}
 			opcode = new JComboBox<String>(arr);
 			opcode.setSelectedItem(OpUtils.getOpcodeText(ain.getOpcode()).toLowerCase());
@@ -206,8 +206,9 @@ public class EditDialogue {
 					}
 				}
 			}
-
+			return true;
 		}
+		return false;
 	}
 
 	private static String toUp(String name) {
@@ -303,6 +304,31 @@ public class EditDialogue {
 			mn.maxLocals = (int) maxL.getValue();
 			mn.maxStack = (int) maxS.getValue();
 			JByteMod.instance.updateFileTree();
+		}
+	}
+
+	public static void createInsertInsnDialog(MethodNode mn, AbstractInsnNode ain) {
+		final JPanel panel = new JPanel(new BorderLayout(5, 5));
+		final JPanel input = new JPanel(new GridLayout(0, 1));
+		final JPanel labels = new JPanel(new GridLayout(0, 1));
+		panel.add(labels, "West");
+		panel.add(input, "Center");
+		labels.add(new JLabel("Type"));
+		JComboBox<String> clazz = new JComboBox<String>(new ArrayList<String>(opc.keySet()).toArray(new String[0]));
+		input.add(clazz);
+		if (JOptionPane.showConfirmDialog(JByteMod.instance, panel, "Insert after", 2) == JOptionPane.OK_OPTION) {
+			try {
+				Class node = Class.forName("org.objectweb.asm.tree" + "." + clazz.getSelectedItem().toString());
+				System.out.println(node.getName());
+				AbstractInsnNode newnode = (AbstractInsnNode) node.getConstructor().newInstance();
+				if (createEditInsnDialog(mn, newnode)) {
+					mn.instructions.insert(ain, newnode);
+					JByteMod.instance.reloadList(mn);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+
 		}
 	}
 }
