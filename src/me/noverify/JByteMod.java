@@ -13,6 +13,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.IOException;
 import java.util.Map;
 
 import javax.swing.DefaultListModel;
@@ -45,6 +46,10 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.Theme;
+import org.fife.ui.rtextarea.RTextScrollPane;
+import org.jetbrains.java.decompiler.main.Fernflower;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
@@ -60,6 +65,8 @@ import me.noverify.list.InsnListEntry;
 import me.noverify.list.ListEntry;
 import me.noverify.list.SearchListEntry;
 import me.noverify.list.TCBListEntry;
+import me.noverify.utils.DecompileClassThread;
+import me.noverify.utils.DecompileMethodThread;
 import me.noverify.utils.EditDialogue;
 import me.noverify.utils.MethodUtils;
 import me.noverify.utils.PopupMenu;
@@ -95,6 +102,12 @@ public class JByteMod extends JFrame {
 	private JMenuItem mntmSelectClassBy;
 	private JMenuItem mntmSelectClassBy_1;
 	private JMenuItem mntmFindMainClasses;
+	private RSyntaxTextArea ffArea;
+	private JCheckBoxMenuItem chckbxmntmDecompile;
+	private JCheckBoxMenuItem chckbxmntmDecompileHugeCode;
+	private JMenu mnDecompiler;
+	private JCheckBoxMenuItem chckbxmntmRefreshDecompiler;
+	private JCheckBoxMenuItem chckbxmntmDeclarationTreeSelection;
 
 	/**
 	 * Launch the application.
@@ -135,7 +148,7 @@ public class JByteMod extends JFrame {
 			}
 		});
 		setBounds(100, 100, 1280, 720);
-		setTitle("JByteMod v0.4.1");
+		setTitle("JByteMod v0.5.0");
 
 		menuBar = new JMenuBar();
 		setJMenuBar(menuBar);
@@ -223,6 +236,8 @@ public class JByteMod extends JFrame {
 		mntmSelectClassBy = new JMenuItem("Select Class by SourceFile");
 		mntmSelectClassBy.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				if (classes == null)
+					return;
 				final JPanel panel = new JPanel(new BorderLayout(5, 5));
 				final JPanel input = new JPanel(new GridLayout(0, 1));
 				final JPanel labels = new JPanel(new GridLayout(0, 1));
@@ -236,7 +251,7 @@ public class JByteMod extends JFrame {
 						&& !cst.getText().isEmpty()) {
 					for (ClassNode cn : classes.values()) {
 						if (cn.sourceFile != null) {
-							if(cn.sourceFile.equals(cst.getText())) {
+							if (cn.sourceFile.equals(cst.getText())) {
 								selectTreeClass(cn);
 								break;
 							}
@@ -250,6 +265,8 @@ public class JByteMod extends JFrame {
 		mntmSelectClassBy_1 = new JMenuItem("Select Class by Name");
 		mntmSelectClassBy_1.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				if (classes == null)
+					return;
 				final JPanel panel = new JPanel(new BorderLayout(5, 5));
 				final JPanel input = new JPanel(new GridLayout(0, 1));
 				final JPanel labels = new JPanel(new GridLayout(0, 1));
@@ -263,7 +280,7 @@ public class JByteMod extends JFrame {
 						&& !cst.getText().isEmpty()) {
 					for (ClassNode cn : classes.values()) {
 						if (cn.name != null) {
-							if(cn.name.equals(cst.getText())) {
+							if (cn.name.equals(cst.getText())) {
 								selectTreeClass(cn);
 								break;
 							}
@@ -273,7 +290,7 @@ public class JByteMod extends JFrame {
 			}
 		});
 		mnNewMenu.add(mntmSelectClassBy_1);
-		
+
 		mntmFindMainClasses = new JMenuItem("Find Main Classes");
 		mntmFindMainClasses.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -293,6 +310,28 @@ public class JByteMod extends JFrame {
 		});
 		chckbxmntmSortMethods.setSelected(true);
 		mnSettings.add(chckbxmntmSortMethods);
+
+		chckbxmntmDeclarationTreeSelection = new JCheckBoxMenuItem("Declaration Tree Selection");
+		chckbxmntmDeclarationTreeSelection.setSelected(true);
+		mnSettings.add(chckbxmntmDeclarationTreeSelection);
+
+		mnDecompiler = new JMenu("Decompiler");
+		mnSettings.add(mnDecompiler);
+
+		chckbxmntmDecompile = new JCheckBoxMenuItem("Decompile");
+		mnDecompiler.add(chckbxmntmDecompile);
+		chckbxmntmDecompile.setSelected(true);
+
+		chckbxmntmDecompileHugeCode = new JCheckBoxMenuItem("Decompile Huge Code");
+		mnDecompiler.add(chckbxmntmDecompileHugeCode);
+
+		chckbxmntmRefreshDecompiler = new JCheckBoxMenuItem("Refresh Decompiler");
+		mnDecompiler.add(chckbxmntmRefreshDecompiler);
+		chckbxmntmDecompile.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				ffArea.setText("");
+			}
+		});
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		contentPane.setLayout(new BorderLayout(0, 0));
@@ -348,22 +387,24 @@ public class JByteMod extends JFrame {
 	}
 
 	protected void searchForMainClasses() {
+		if (classes == null)
+			return;
 		searchDesc.setText("Main Classes");
-		rightSide.setSelectedIndex(1);
+		rightSide.setSelectedIndex(3);
 		DefaultListModel<SearchListEntry> lm = (DefaultListModel<SearchListEntry>) searchList.getModel();
 		lm.clear();
 		for (ClassNode c : classes.values()) {
 			for (MethodNode m : c.methods) {
-				if(m.name.equals("main") && m.desc.equals("([Ljava/lang/String;)V")) {
+				if (m.name.equals("main") && m.desc.equals("([Ljava/lang/String;)V")) {
 					lm.addElement(new SearchListEntry(c, m));
 				}
 			}
-		}		
+		}
 	}
 
 	protected void searchForCst(String search, boolean exact, boolean caseSens) {
 		searchDesc.setText("Results for \"" + search + "\"");
-		rightSide.setSelectedIndex(1);
+		rightSide.setSelectedIndex(4);
 		DefaultListModel<SearchListEntry> lm = (DefaultListModel<SearchListEntry>) searchList.getModel();
 		lm.clear();
 		if (!caseSens) {
@@ -387,17 +428,19 @@ public class JByteMod extends JFrame {
 	}
 
 	public void decompileClass(ClassNode cn) {
-		rightSide.setSelectedIndex(0);
 		DefaultListModel<ListEntry> lm = (DefaultListModel<ListEntry>) codeList.getModel();
 		lm.clear();
 		rightDesc.setText(cn.name + " fields");
-		for(FieldNode fn : cn.fields) {
+		for (FieldNode fn : cn.fields) {
 			lm.addElement(new FieldListEntry(cn, fn));
+		}
+		ffArea.setText("");
+		if (chckbxmntmDecompile.isSelected()) {
+			new DecompileClassThread(cn).start();
 		}
 	}
 
 	protected void decompileMethod(ClassNode cn, MethodNode mn) {
-		rightSide.setSelectedIndex(0);
 		DefaultListModel<ListEntry> lm = (DefaultListModel<ListEntry>) codeList.getModel();
 		lm.clear();
 		rightDesc.setText(cn.name + "." + mn.name + mn.desc);
@@ -411,6 +454,13 @@ public class JByteMod extends JFrame {
 		for (TryCatchBlockNode tcbn : mn.tryCatchBlocks) {
 			lm2.addElement(new TCBListEntry(cn, mn, tcbn));
 		}
+		if (chckbxmntmDecompile.isSelected()) {
+			new DecompileMethodThread(mn).start();
+		}
+	}
+
+	public boolean decompileHuge() {
+		return chckbxmntmDecompileHugeCode.isSelected();
 	}
 
 	protected void openFileChooserLoad() {
@@ -506,7 +556,7 @@ public class JByteMod extends JFrame {
 					TreePath tp = fileTree.getPathForLocation(me.getX(), me.getY());
 					if (tp != null && tp.getParentPath() != null) {
 						fileTree.setSelectionPath(tp);
-						if(fileTree.getLastSelectedPathComponent() == null) {
+						if (fileTree.getLastSelectedPathComponent() == null) {
 							return;
 						}
 						MethodNode mn = ((SortedTreeNode) fileTree.getLastSelectedPathComponent()).getMn();
@@ -611,8 +661,11 @@ public class JByteMod extends JFrame {
 						public void actionPerformed(ActionEvent e) {
 							ClassNode cn = searchList.getSelectedValue().getCn();
 							MethodNode mn = searchList.getSelectedValue().getMn();
-							selectTreeMethod(cn, mn);
-							decompileMethod(cn, mn);
+							if (!chckbxmntmDeclarationTreeSelection.isSelected()) {
+								decompileMethod(cn, mn);
+							} else {
+								selectTreeMethod(cn, mn);
+							}
 						}
 
 					});
@@ -632,17 +685,6 @@ public class JByteMod extends JFrame {
 		code.add(new JScrollPane(codeList), BorderLayout.CENTER);
 		rightSide.addTab("Code", code);
 
-		JPanel search = new JPanel();
-		search.setLayout(new BorderLayout(0, 0));
-		JPanel lpad2 = new JPanel();
-		lpad2.setBorder(new EmptyBorder(1, 5, 0, 5));
-		lpad2.setLayout(new GridLayout());
-		searchDesc = new JLabel(" ");
-		lpad2.add(searchDesc);
-		search.add(lpad2, BorderLayout.NORTH);
-		search.add(new JScrollPane(searchList), BorderLayout.CENTER);
-		rightSide.addTab("Search", search);
-
 		JPanel tcb = new JPanel();
 		tcb.setLayout(new BorderLayout(0, 0));
 		JPanel lpad3 = new JPanel();
@@ -653,6 +695,37 @@ public class JByteMod extends JFrame {
 		tcb.add(lpad3, BorderLayout.NORTH);
 		tcb.add(new JScrollPane(tcbList), BorderLayout.CENTER);
 		rightSide.addTab("Try Catch Blocks", tcb);
+		ffArea = new RSyntaxTextArea();
+		ffArea.setSyntaxEditingStyle("text/java");
+		ffArea.setCodeFoldingEnabled(true);
+		ffArea.setAntiAliasingEnabled(true);
+		ffArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+		ffArea.setEditable(false);
+		//change theme for fernflower 
+		try {
+			Theme theme = Theme.load(getClass().getResourceAsStream("/org/fife/ui/rsyntaxtextarea/themes/eclipse.xml"));
+			theme.apply(ffArea);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		RTextScrollPane scp = new RTextScrollPane(ffArea);
+		scp.setColumnHeaderView(new JLabel("Fernflower Decompiler"));
+		rightSide.addTab("Decompiler", scp);
+
+		JPanel search = new JPanel();
+		search.setLayout(new BorderLayout(0, 0));
+		JPanel lpad2 = new JPanel();
+		lpad2.setBorder(new EmptyBorder(1, 5, 0, 5));
+		lpad2.setLayout(new GridLayout());
+		searchDesc = new JLabel(" ");
+		lpad2.add(searchDesc);
+		search.add(lpad2, BorderLayout.NORTH);
+		search.add(new JScrollPane(searchList), BorderLayout.CENTER);
+		rightSide.addTab("Search", search);
+	}
+
+	public RSyntaxTextArea getFernflowerArea() {
+		return ffArea;
 	}
 
 	private void selectTreeMethod(ClassNode cn, MethodNode mn) {
@@ -700,6 +773,11 @@ public class JByteMod extends JFrame {
 		lm.clear();
 		for (AbstractInsnNode ain : mn.instructions.toArray()) {
 			lm.addElement(new InsnListEntry(mn, ain));
+		}
+		if (chckbxmntmRefreshDecompiler.isSelected()) {
+			if (chckbxmntmDecompile.isSelected()) {
+				new DecompileMethodThread(mn).start();
+			}
 		}
 	}
 
