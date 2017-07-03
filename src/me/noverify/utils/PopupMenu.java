@@ -14,6 +14,7 @@ import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import me.noverify.JByteMod;
+import me.noverify.list.FieldListEntry;
 import me.noverify.list.InsnListEntry;
 import me.noverify.list.ListEntry;
 
@@ -90,6 +91,21 @@ public class PopupMenu {
 					codeList.setFocusable(false);
 				}
 			});
+			menu.show(JByteMod.instance, (int) JByteMod.instance.getMousePosition().getX(), (int) JByteMod.instance.getMousePosition().getY());
+		} else if(entr instanceof FieldListEntry) {
+			FieldListEntry fle = (FieldListEntry) entr;
+			JPopupMenu menu = new JPopupMenu();
+			JMenuItem edit = new JMenuItem("Edit");
+			edit.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					try {
+						EditDialogue.createEditFieldDialog(fle.getCn(), fle.getFn());
+					} catch (Exception e1) {
+						e1.printStackTrace();
+					}
+				}
+			});
+			menu.add(edit);
 			menu.show(JByteMod.instance, (int) JByteMod.instance.getMousePosition().getX(), (int) JByteMod.instance.getMousePosition().getY());
 		}
 	}

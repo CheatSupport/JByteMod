@@ -17,6 +17,7 @@ import java.util.Map;
 
 import javax.swing.DefaultListModel;
 import javax.swing.JCheckBox;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -30,7 +31,6 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
@@ -39,36 +39,31 @@ import javax.swing.UIManager;
 import javax.swing.UIManager.LookAndFeelInfo;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
-import javax.swing.event.PopupMenuEvent;
-import javax.swing.event.PopupMenuListener;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TryCatchBlockNode;
 
 import me.lpk.util.JarUtils;
 import me.noverify.list.CellRenderer;
+import me.noverify.list.FieldListEntry;
 import me.noverify.list.InsnListEntry;
 import me.noverify.list.ListEntry;
 import me.noverify.list.SearchListEntry;
 import me.noverify.list.TCBListEntry;
-import me.noverify.utils.DisplayUtils;
 import me.noverify.utils.EditDialogue;
 import me.noverify.utils.MethodUtils;
 import me.noverify.utils.PopupMenu;
 import me.noverify.utils.SortedTreeNode;
-import javax.swing.JCheckBoxMenuItem;
-import javax.swing.event.ChangeListener;
-import javax.swing.event.ChangeEvent;
 
 public class JByteMod extends JFrame {
 
@@ -96,6 +91,10 @@ public class JByteMod extends JFrame {
 	private JCheckBoxMenuItem chckbxmntmSortMethods;
 	private JLabel tcbDesc;
 	private JList<TCBListEntry> tcbList;
+	private JMenu mnNewMenu;
+	private JMenuItem mntmSelectClassBy;
+	private JMenuItem mntmSelectClassBy_1;
+	private JMenuItem mntmFindMainClasses;
 
 	/**
 	 * Launch the application.
@@ -218,6 +217,71 @@ public class JByteMod extends JFrame {
 		mntmSearch.setAccelerator(KeyStroke.getKeyStroke('H', Toolkit.getDefaultToolkit().getMenuShortcutKeyMask()));
 		mnTools.add(mntmSearch);
 
+		mnNewMenu = new JMenu("Utils");
+		mnTools.add(mnNewMenu);
+
+		mntmSelectClassBy = new JMenuItem("Select Class by SourceFile");
+		mntmSelectClassBy.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				final JPanel panel = new JPanel(new BorderLayout(5, 5));
+				final JPanel input = new JPanel(new GridLayout(0, 1));
+				final JPanel labels = new JPanel(new GridLayout(0, 1));
+				panel.add(labels, "West");
+				panel.add(input, "Center");
+				panel.add(new JLabel("Warning: This could take some time\n on big jars!"), "South");
+				labels.add(new JLabel("SourceFile:"));
+				JTextField cst = new JTextField();
+				input.add(cst);
+				if (JOptionPane.showConfirmDialog(JByteMod.instance, panel, "Select Class by SourceFile", 2) == JOptionPane.OK_OPTION
+						&& !cst.getText().isEmpty()) {
+					for (ClassNode cn : classes.values()) {
+						if (cn.sourceFile != null) {
+							if(cn.sourceFile.equals(cst.getText())) {
+								selectTreeClass(cn);
+								break;
+							}
+						}
+					}
+				}
+			}
+		});
+		mnNewMenu.add(mntmSelectClassBy);
+
+		mntmSelectClassBy_1 = new JMenuItem("Select Class by Name");
+		mntmSelectClassBy_1.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				final JPanel panel = new JPanel(new BorderLayout(5, 5));
+				final JPanel input = new JPanel(new GridLayout(0, 1));
+				final JPanel labels = new JPanel(new GridLayout(0, 1));
+				panel.add(labels, "West");
+				panel.add(input, "Center");
+				panel.add(new JLabel("Warning: This could take some time\n on big jars!"), "South");
+				labels.add(new JLabel("Class Name:"));
+				JTextField cst = new JTextField();
+				input.add(cst);
+				if (JOptionPane.showConfirmDialog(JByteMod.instance, panel, "Select Class by Name", 2) == JOptionPane.OK_OPTION
+						&& !cst.getText().isEmpty()) {
+					for (ClassNode cn : classes.values()) {
+						if (cn.name != null) {
+							if(cn.name.equals(cst.getText())) {
+								selectTreeClass(cn);
+								break;
+							}
+						}
+					}
+				}
+			}
+		});
+		mnNewMenu.add(mntmSelectClassBy_1);
+		
+		mntmFindMainClasses = new JMenuItem("Find Main Classes");
+		mntmFindMainClasses.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				searchForMainClasses();
+			}
+		});
+		mnNewMenu.add(mntmFindMainClasses);
+
 		mnSettings = new JMenu("Settings");
 		menuBar.add(mnSettings);
 
@@ -283,6 +347,20 @@ public class JByteMod extends JFrame {
 		contentPane.add(border, BorderLayout.CENTER);
 	}
 
+	protected void searchForMainClasses() {
+		searchDesc.setText("Main Classes");
+		rightSide.setSelectedIndex(1);
+		DefaultListModel<SearchListEntry> lm = (DefaultListModel<SearchListEntry>) searchList.getModel();
+		lm.clear();
+		for (ClassNode c : classes.values()) {
+			for (MethodNode m : c.methods) {
+				if(m.name.equals("main") && m.desc.equals("([Ljava/lang/String;)V")) {
+					lm.addElement(new SearchListEntry(c, m));
+				}
+			}
+		}		
+	}
+
 	protected void searchForCst(String search, boolean exact, boolean caseSens) {
 		searchDesc.setText("Results for \"" + search + "\"");
 		rightSide.setSelectedIndex(1);
@@ -308,10 +386,14 @@ public class JByteMod extends JFrame {
 		}
 	}
 
-	protected void decompileClass(ClassNode cn) {
+	public void decompileClass(ClassNode cn) {
 		rightSide.setSelectedIndex(0);
 		DefaultListModel<ListEntry> lm = (DefaultListModel<ListEntry>) codeList.getModel();
 		lm.clear();
+		rightDesc.setText(cn.name + " fields");
+		for(FieldNode fn : cn.fields) {
+			lm.addElement(new FieldListEntry(cn, fn));
+		}
 	}
 
 	protected void decompileMethod(ClassNode cn, MethodNode mn) {
@@ -322,7 +404,7 @@ public class JByteMod extends JFrame {
 		for (AbstractInsnNode ain : mn.instructions.toArray()) {
 			lm.addElement(new InsnListEntry(mn, ain));
 		}
-		
+
 		DefaultListModel<TCBListEntry> lm2 = (DefaultListModel<TCBListEntry>) tcbList.getModel();
 		lm2.clear();
 		tcbDesc.setText("Try Catch Blocks: " + cn.name + "." + mn.name + mn.desc);
@@ -424,6 +506,9 @@ public class JByteMod extends JFrame {
 					TreePath tp = fileTree.getPathForLocation(me.getX(), me.getY());
 					if (tp != null && tp.getParentPath() != null) {
 						fileTree.setSelectionPath(tp);
+						if(fileTree.getLastSelectedPathComponent() == null) {
+							return;
+						}
 						MethodNode mn = ((SortedTreeNode) fileTree.getLastSelectedPathComponent()).getMn();
 						ClassNode cn = ((SortedTreeNode) fileTree.getLastSelectedPathComponent()).getCn();
 						if (mn != null) {
@@ -438,8 +523,8 @@ public class JByteMod extends JFrame {
 							JMenuItem clear = new JMenuItem("Clear");
 							clear.addActionListener(new ActionListener() {
 								public void actionPerformed(ActionEvent e) {
-									if (JOptionPane.showConfirmDialog(JByteMod.instance,
-											"Are you sure you want to clear that method?", "Confirm", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+									if (JOptionPane.showConfirmDialog(JByteMod.instance, "Are you sure you want to clear that method?", "Confirm",
+											JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
 										MethodUtils.clear(mn);
 										decompileMethod(cn, mn);
 									}
@@ -526,7 +611,7 @@ public class JByteMod extends JFrame {
 						public void actionPerformed(ActionEvent e) {
 							ClassNode cn = searchList.getSelectedValue().getCn();
 							MethodNode mn = searchList.getSelectedValue().getMn();
-							selectTree(cn, mn);
+							selectTreeMethod(cn, mn);
 							decompileMethod(cn, mn);
 						}
 
@@ -557,7 +642,7 @@ public class JByteMod extends JFrame {
 		search.add(lpad2, BorderLayout.NORTH);
 		search.add(new JScrollPane(searchList), BorderLayout.CENTER);
 		rightSide.addTab("Search", search);
-		
+
 		JPanel tcb = new JPanel();
 		tcb.setLayout(new BorderLayout(0, 0));
 		JPanel lpad3 = new JPanel();
@@ -570,10 +655,17 @@ public class JByteMod extends JFrame {
 		rightSide.addTab("Try Catch Blocks", tcb);
 	}
 
-	private void selectTree(ClassNode cn, MethodNode mn) {
+	private void selectTreeMethod(ClassNode cn, MethodNode mn) {
 		new Thread(() -> {
 			DefaultTreeModel tm = (DefaultTreeModel) fileTree.getModel();
 			selectEntry(mn, tm, (SortedTreeNode) tm.getRoot());
+		}).start();
+	}
+
+	private void selectTreeClass(ClassNode cn) {
+		new Thread(() -> {
+			DefaultTreeModel tm = (DefaultTreeModel) fileTree.getModel();
+			selectEntry(cn, tm, (SortedTreeNode) tm.getRoot());
 		}).start();
 	}
 
@@ -586,6 +678,19 @@ public class JByteMod extends JFrame {
 			}
 			if (!child.isLeaf()) {
 				selectEntry(mn, tm, child);
+			}
+		}
+	}
+
+	private void selectEntry(ClassNode cn, DefaultTreeModel tm, SortedTreeNode node) {
+		for (int i = 0; i < tm.getChildCount(node); i++) {
+			SortedTreeNode child = (SortedTreeNode) tm.getChild(node, i);
+			if (child.getCn() != null && child.getMn() == null && child.getCn().equals(cn)) {
+				fileTree.setSelectionPath(new TreePath(tm.getPathToRoot(child)));
+				break;
+			}
+			if (!child.isLeaf()) {
+				selectEntry(cn, tm, child);
 			}
 		}
 	}

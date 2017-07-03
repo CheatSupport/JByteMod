@@ -70,7 +70,7 @@ public class DisplayUtils {
 	}
 
 	public static String getDisplayClass(String str) {
-		String[] spl = str.split("/"); 
+		String[] spl = str.split("/");
 		if (spl.length > 1) {
 			return TextUtils.addTag(spl[spl.length - 1], "font color=#557799");
 		}
@@ -149,4 +149,37 @@ public class DisplayUtils {
 		}
 		return TextUtils.addTag(result, "font color=#557799");
 	}
+
+	public final static String getDisplayAccess(int var1) {
+		String var2 = "";
+		if ((var1 & 1) != 0) {
+			var2 = var2 + "public ";
+		}
+
+		if ((var1 & 2) != 0) {
+			var2 = var2 + "private ";
+		}
+
+		if ((var1 & 4) != 0) {
+			var2 = var2 + "protected ";
+		}
+
+		if ((var1 & 8) != 0) {
+			var2 = var2 + "static ";
+		}
+
+		if ((var1 & 16) != 0) {
+			var2 = var2 + "final ";
+		}
+
+		if ((var1 & 1024) != 0) {
+			var2 = var2 + "abstract ";
+		}
+		if (var2.length() > 0) {
+			var2 = var2.substring(0, var2.length() - 1);
+		}
+
+		return var2;
+	}
+
 }

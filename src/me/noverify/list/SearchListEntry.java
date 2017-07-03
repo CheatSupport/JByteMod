@@ -14,11 +14,18 @@ public class SearchListEntry extends ListEntry {
 	private String text;
 
 	public SearchListEntry(ClassNode cn, MethodNode mn, String found) {
-		super(TextUtils.toHtml(DisplayUtils.getDisplayType(cn.name) + "." + TextUtils.escape(mn.name) + " - "
+		super(TextUtils.toHtml(DisplayUtils.getDisplayClass(cn.name) + "." + TextUtils.escape(mn.name) + " - "
 				+ TextUtils.addTag("\"" + found + "\"", "font color=#559955")));
 		this.cn = cn;
 		this.mn = mn;
 		this.found = found;
+	}
+
+	public SearchListEntry(ClassNode c, MethodNode m) {
+		super(TextUtils.toHtml(DisplayUtils.getDisplayClass(c.name) + "." + TextUtils.escape(m.name)));
+		this.cn = c;
+		this.mn = m;
+		this.found = "";
 	}
 
 	public ClassNode getCn() {

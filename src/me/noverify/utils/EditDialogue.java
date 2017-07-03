@@ -19,6 +19,7 @@ import javax.swing.text.NumberFormatter;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.IincInsnNode;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
@@ -325,6 +326,46 @@ public class EditDialogue {
 					mn.instructions.insert(ain, newnode);
 					JByteMod.instance.reloadList(mn);
 				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+
+		}
+	}
+
+	public static void createEditFieldDialog(ClassNode cn, FieldNode fn) {
+		final JPanel panel = new JPanel(new BorderLayout(5, 5));
+		final JPanel input = new JPanel(new GridLayout(0, 1));
+		final JPanel labels = new JPanel(new GridLayout(0, 1));
+		panel.add(labels, "West");
+		panel.add(input, "Center");
+		panel.add(new JLabel("Warning: References will not be updated!"), "South");
+		labels.add(new JLabel("Field Name:"));
+		JTextField name = new JTextField(fn.name);
+		input.add(name);
+		labels.add(new JLabel("Field Desc:"));
+		JTextField desc = new JTextField(fn.desc);
+		input.add(desc);
+		labels.add(new JLabel("Field Access:"));
+		NumberFormat format = NumberFormat.getInstance();
+		format.setGroupingUsed(false);
+		NumberFormatter formatter = new NumberFormatter(format);
+		formatter.setValueClass(Integer.class);
+		formatter.setMinimum(0);
+		formatter.setMaximum(Integer.MAX_VALUE);
+		formatter.setAllowsInvalid(false);
+		formatter.setCommitsOnValidEdit(true);
+		formatter.setOverwriteMode(true);
+		JFormattedTextField access = new JFormattedTextField(formatter);
+		access.setValue(fn.access);
+		input.add(access);
+
+		if (JOptionPane.showConfirmDialog(JByteMod.instance, panel, "Insert after", 2) == JOptionPane.OK_OPTION) {
+			try {
+				fn.name = name.getText();
+				fn.desc = desc.getText();
+				fn.access = (int) access.getValue();
+				JByteMod.instance.decompileClass(cn);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
